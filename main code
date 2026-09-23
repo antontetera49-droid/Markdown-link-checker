@@ -1,0 +1,55 @@
+from pathlib import Path
+from pydantic import BaseModel, Field
+import re
+
+class LinkCheckerConfig(BaseModel):
+    docs_directory: Path = Field(..., description="Directory containing Markdown files")
+    skip_hidden: bool = Field(default=True, description="Skip system hidden files")
+
+def check_links(config: LinkCheckerConfig) -> int:
+    if not config.docs_directory.exists():
+        print(f"Directory {config.docs_directory} not found.")
+        return 0
+
+    broken_count = 0
+    link_pattern = re.compile(r'\[([^\]]+)\]\(([^)]+)\)')
+
+    for md_file in config.docs_directory.glob("*.md"):
+        if config.skip_hidden and md_file.name.startswith('.'):
+            continue
+
+        try:
+            content = md_file.read_text(encoding="utf-8")
+        except Exception as e:
+            print(f"Error reading {md_file.name}: {e}")
+            continue
+
+        matches = link_pattern.findall(content)
+        
+        for text, link in matches:
+            link = link.strip()
+            # Filter garbage / external links / anchors / mailtos / empty links
+            if not link or link.startswith(("http://", "https://", "mailto:", "tel:", "#")):
+                continue
+                
+            # Remove anchors from local path if present (e.g. file.md#section)
+            clean_link = link.split('#')[0]
+            if not clean_link:
+                continue
+
+            target_path = md_file.parent / clean_link
+            if not target_path.exists():
+                print(f"Broken link in {md_file.name}: '{text}' -> {link}")
+                broken_count += 1
+
+    print(f"Check complete. Found {broken_count} broken local links.")
+    return broken_count
+
+if name == "main":
+    config = LinkCheckerConfig(docs_directory=Path("./docs"))
+    check_links(config)
+
+========================================================================================================================================
+#If you need to: customize/upgrade/integrate or just dont wanna to set it by yourself, then just text me.
+#Telegram for work: @Myhamed91
+========================================================================================================================================
